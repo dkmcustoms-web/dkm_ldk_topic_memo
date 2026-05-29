@@ -55,6 +55,7 @@ def get_engine():
     return create_engine(_database_url(), pool_pre_ping=True)
 
 
+@st.cache_resource
 def init_db():
     with get_engine().begin() as conn:
         conn.execute(text("""
@@ -84,6 +85,7 @@ def init_db():
 
 
 # ----- Topics / bullets -----
+@st.cache_data(ttl=300)
 def lijst_topics():
     with get_engine().connect() as conn:
         return conn.execute(text(
@@ -95,19 +97,24 @@ def voeg_topic_toe(naam):
         conn.execute(text(
             "INSERT INTO topics (naam) VALUES (:n) ON CONFLICT (naam) DO NOTHING"),
             {"n": naam.strip()})
+    lijst_topics.clear()
 
 
 def hernoem_topic(tid, naam):
     with get_engine().begin() as conn:
         conn.execute(text("UPDATE topics SET naam = :n WHERE id = :id"),
                      {"n": naam.strip(), "id": tid})
+    lijst_topics.clear()
 
 
 def verwijder_topic(tid):
     with get_engine().begin() as conn:
         conn.execute(text("DELETE FROM topics WHERE id = :id"), {"id": tid})
+    lijst_topics.clear()
+    lijst_bullets.clear()
 
 
+@st.cache_data(ttl=300)
 def lijst_bullets(tid):
     with get_engine().connect() as conn:
         return conn.execute(text(
@@ -120,20 +127,24 @@ def voeg_bullet_toe(tid, tekst):
         conn.execute(text(
             "INSERT INTO bullets (topic_id, tekst) VALUES (:t, :x)"),
             {"t": tid, "x": tekst.strip()})
+    lijst_bullets.clear()
 
 
 def update_bullet(bid, tekst):
     with get_engine().begin() as conn:
         conn.execute(text("UPDATE bullets SET tekst = :x WHERE id = :id"),
                      {"x": tekst.strip(), "id": bid})
+    lijst_bullets.clear()
 
 
 def verwijder_bullet(bid):
     with get_engine().begin() as conn:
         conn.execute(text("DELETE FROM bullets WHERE id = :id"), {"id": bid})
+    lijst_bullets.clear()
 
 
 # ----- Gesprekken -----
+@st.cache_data(ttl=300)
 def lijst_gesprekken():
     with get_engine().connect() as conn:
         return conn.execute(text(
@@ -141,6 +152,7 @@ def lijst_gesprekken():
         )).fetchall()
 
 
+@st.cache_data(ttl=300)
 def laad_gesprek(gid):
     with get_engine().connect() as conn:
         return conn.execute(text(
@@ -150,9 +162,11 @@ def laad_gesprek(gid):
 
 def nieuw_gesprek(koper):
     with get_engine().begin() as conn:
-        return conn.execute(text(
+        gid = conn.execute(text(
             "INSERT INTO gesprekken (koper) VALUES (:k) RETURNING id"),
             {"k": koper.strip()}).scalar_one()
+    lijst_gesprekken.clear()
+    return gid
 
 
 def bewaar_gesprek(gid, koper, notities):
@@ -161,11 +175,15 @@ def bewaar_gesprek(gid, koper, notities):
             UPDATE gesprekken SET koper = :k, notities = :n, bijgewerkt = now()
              WHERE id = :id
         """), {"id": gid, "k": koper.strip(), "n": notities})
+    lijst_gesprekken.clear()
+    laad_gesprek.clear()
 
 
 def verwijder_gesprek(gid):
     with get_engine().begin() as conn:
         conn.execute(text("DELETE FROM gesprekken WHERE id = :id"), {"id": gid})
+    lijst_gesprekken.clear()
+    laad_gesprek.clear()
 
 
 # ---------------------------------------------------------------------------
